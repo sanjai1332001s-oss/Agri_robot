@@ -1,293 +1,556 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mechtrobotics | Smart Agriculture Rover</title>
-
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f5faf7" />
+  <title>AgriRover | Smart Agriculture Dashboard</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
-
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
+    :root {
+      --bg: #f5f8f6;
+      --panel: #ffffff;
+      --ink: #1e2b26;
+      --muted: #75827b;
+      --line: #e7eee9;
+      --green: #18b58b;
+      --green-soft: #e7f8f2;
+      --blue: #4d87d9;
+      --amber: #d9a044;
+      --purple: #9062d5;
+      --red: #d95c5c;
+      --shadow: 0 8px 28px rgba(35, 68, 50, .055);
+      --radius: 18px;
+    }
     * { box-sizing: border-box; }
-
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #101827;
-      color: #eef2ff;
+    body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--ink); background: var(--bg); }
+    button, input, select { font: inherit; }
+    .app { min-height: 100vh; display: grid; grid-template-columns: 238px minmax(0, 1fr); }
+    aside { background: #fff; border-right: 1px solid var(--line); padding: 25px 16px 18px; display: flex; flex-direction: column; gap: 25px; }
+    .brand { display: flex; align-items: center; gap: 11px; padding: 0 10px; }
+    .brand-mark { width: 40px; height: 40px; border-radius: 14px; display: grid; place-items: center; color: white; font-size: 22px; background: linear-gradient(135deg, #1bb88c, #4c9d65); box-shadow: 0 6px 14px #1bb88c33; }
+    .brand-name { font-weight: 800; letter-spacing: -.4px; font-size: 17px; }
+    .brand-sub { font-size: 10px; color: var(--muted); margin-top: 3px; }
+    nav { display: grid; gap: 5px; }
+    .nav-btn { border: 0; width: 100%; padding: 12px 12px; border-radius: 12px; display: flex; align-items: center; gap: 12px; text-align: left; background: transparent; color: #65736b; cursor: pointer; transition: .2s; font-size: 13px; }
+    .nav-btn .ico { width: 20px; text-align: center; font-size: 16px; }
+    .nav-btn:hover { background: #f3f8f5; color: var(--ink); }
+    .nav-btn.active { color: #148b6d; background: var(--green-soft); font-weight: 700; box-shadow: inset 3px 0 var(--green); }
+    .sidebar-bottom { margin-top: auto; display: grid; gap: 14px; }
+    .connection { border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); background: #fbfdfb; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #a8b2ac; display: inline-block; flex: 0 0 auto; }
+    .dot.online { background: #18b58b; box-shadow: 0 0 0 4px #18b58b20; }
+    .dot.offline { background: var(--red); }
+    .side-weather { padding: 0 11px; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
+    main { min-width: 0; padding: 30px clamp(18px, 3vw, 42px) 38px; }
+    .topbar { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 26px; }
+    h1 { margin: 0; font-size: clamp(24px, 2.5vw, 32px); letter-spacing: -1.1px; }
+    .subtitle { margin-top: 6px; font-size: 13px; color: var(--muted); }
+    .location { display: flex; align-items: center; gap: 10px; padding: 9px 13px; background: #fff; border: 1px solid var(--line); border-radius: 14px; white-space: nowrap; }
+    .location .temp { font-weight: 800; font-size: 16px; }
+    .location small { display: block; font-size: 10px; color: #159575; margin-top: 2px; }
+    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 22px; }
+    .metric { position: relative; overflow: hidden; background: var(--panel); border: 1px solid #edf2ee; border-radius: var(--radius); padding: 21px 20px 18px; box-shadow: var(--shadow); min-width: 0; }
+    .metric::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; background: var(--accent); }
+    .metric-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: #67756d; font-size: 12px; }
+    .metric-icon { color: var(--accent); font-size: 20px; }
+    .metric-value { font-size: clamp(25px, 2.2vw, 33px); font-weight: 800; letter-spacing: -1px; margin-top: 13px; overflow-wrap: anywhere; }
+    .metric-foot { display: flex; align-items: center; gap: 6px; color: var(--accent); font-size: 11px; margin-top: 8px; }
+    .metric-foot .dot { width: 6px; height: 6px; background: var(--accent); }
+    .soil { --accent: var(--green); } .humidity { --accent: var(--blue); } .temperature { --accent: var(--amber); } .air { --accent: var(--purple); }
+    .panel { background: var(--panel); border: 1px solid #edf2ee; border-radius: var(--radius); box-shadow: var(--shadow); padding: 21px; margin-bottom: 20px; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .panel-title { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 800; }
+    .panel-title .title-icon { color: var(--green); font-size: 18px; }
+    .panel-tools { display: flex; gap: 8px; align-items: center; }
+    .control { background: #fff; border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; color: #5e6b63; font-size: 11px; }
+    button.control { cursor: pointer; }
+    .chart-wrap { height: 320px; position: relative; }
+    .lower-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(270px, 1fr); gap: 20px; }
+    .sensor-list { display: grid; gap: 14px; }
+    .sensor-row { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 12px 0; border-bottom: 1px solid #f0f3f1; }
+    .sensor-row:last-child { border-bottom: 0; }
+    .sensor-label { font-size: 12px; color: var(--muted); }
+    .sensor-number { font-weight: 750; font-size: 15px; margin-top: 4px; }
+    .pill { border-radius: 99px; background: var(--green-soft); color: #148b6d; padding: 6px 9px; font-size: 10px; font-weight: 700; white-space: nowrap; }
+    .pill.warn { background: #fff5e5; color: #9b6b1b; }
+    .pill.bad { background: #fff0f0; color: #b74444; }
+    .advice-card { border-radius: 14px; background: linear-gradient(140deg, #e9f9f2, #f5fbf7); border: 1px solid #dff2e8; padding: 17px; margin-bottom: 12px; }
+    .advice-card h3 { font-size: 13px; margin: 0 0 7px; }
+    .advice-card p { font-size: 12px; line-height: 1.6; color: #60736a; margin: 0; }
+    .small-note { color: var(--muted); font-size: 11px; line-height: 1.6; }
+    .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .field { display: grid; gap: 7px; font-size: 12px; color: #65736b; }
+    .field input, .field select { width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); }
+    .field.full { grid-column: 1 / -1; }
+    .primary { border: 0; background: #159b78; color: white; border-radius: 10px; padding: 11px 15px; font-weight: 700; cursor: pointer; }
+    .primary:hover { background: #0f8667; }
+    .secondary { border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 10px 13px; cursor: pointer; color: var(--ink); }
+    .page { display: none; } .page.active { display: block; }
+    .empty-state { border: 1px dashed #d9e6de; border-radius: 14px; padding: 26px; text-align: center; color: var(--muted); font-size: 13px; }
+    footer { color: #98a39c; font-size: 10px; text-align: right; padding: 4px 2px 0; }
+    @media (max-width: 1100px) { .app { grid-template-columns: 205px minmax(0, 1fr); } .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .lower-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 720px) {
+      .app { display: block; }
+      aside { padding: 13px 14px; border-right: 0; border-bottom: 1px solid var(--line); gap: 12px; }
+      .brand { padding: 0 4px; }
+      nav { display: flex; overflow-x: auto; gap: 6px; padding-bottom: 3px; }
+      .nav-btn { width: auto; flex: 0 0 auto; padding: 10px 12px; }
+      .nav-btn .nav-label { white-space: nowrap; }
+      .sidebar-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+      .side-weather { display: none; }
+      .connection { padding: 8px 10px; }
+      main { padding: 22px 14px 28px; }
+      .topbar { align-items: flex-start; }
+      .location { padding: 7px 9px; }
+      .metrics { gap: 10px; }
+      .metric { padding: 17px 14px 14px; }
+      .metric-head { font-size: 11px; }
+      .metric-value { font-size: 25px; }
+      .panel { padding: 15px; }
+      .chart-wrap { height: 260px; }
+      .settings-grid { grid-template-columns: 1fr; }
+      .field.full { grid-column: auto; }
     }
-
-    header {
-      padding: 24px;
-      background: #172337;
-      border-bottom: 1px solid #344258;
-    }
-
-    header h1 { margin: 0 0 8px; font-size: 25px; }
-    header p { margin: 0; color: #aebdd2; }
-
-    main { max-width: 1100px; margin: auto; padding: 24px; }
-
-    .status {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      margin-bottom: 24px;
-    }
-
-    .pill {
-      padding: 10px 14px;
-      background: #202d42;
-      border-radius: 8px;
-      font-size: 14px;
-    }
-
-    .dot {
-      display: inline-block;
-      width: 9px;
-      height: 9px;
-      border-radius: 50%;
-      background: #8792a6;
-      margin-right: 7px;
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 16px;
-    }
-
-    .card {
-      background: #1b2940;
-      border: 1px solid #35445c;
-      border-radius: 14px;
-      padding: 22px;
-    }
-
-    .label { color: #b6c4d9; font-size: 14px; }
-
-    .value {
-      font-size: 32px;
-      font-weight: bold;
-      margin: 14px 0;
-      overflow-wrap: anywhere;
-    }
-
-    .sub { color: #9eafc7; font-size: 13px; }
-
-    .bar {
-      height: 8px;
-      background: #35445c;
-      border-radius: 10px;
-      overflow: hidden;
-      margin-top: 16px;
-    }
-
-    .fill {
-      height: 100%;
-      width: 0%;
-      background: #4ade80;
-      transition: width .3s;
-    }
-
-    .section { margin-top: 26px; }
-    .section h2 { font-size: 19px; }
-
-    #error {
-      color: #fca5a5;
-      overflow-wrap: anywhere;
-    }
-
-    footer {
-      padding: 24px;
-      color: #9eafc7;
-      text-align: center;
-      font-size: 13px;
-    }
+    @media (max-width: 400px) { .metrics { grid-template-columns: 1fr 1fr; } .metric-value { font-size: 22px; } .subtitle { font-size: 12px; } }
   </style>
 </head>
-
 <body>
-<header>
-  <h1>Smart Agriculture Rover</h1>
-  <p>Mechtrobotics | Real-time IoT Monitoring</p>
-</header>
-
-<main>
-  <div class="status">
-    <div class="pill">
-      <span class="dot" id="mqttDot"></span>
-      <span id="mqttStatus">MQTT: Disconnected</span>
+<div class="app">
+  <aside>
+    <div class="brand">
+      <div class="brand-mark">🌱</div>
+      <div><div class="brand-name">AgriRover</div><div class="brand-sub">Precision IoT Robot</div></div>
     </div>
-
-    <div class="pill">
-      <span id="deviceStatus">Rover: Unknown</span>
+    <nav id="navigation">
+      <button class="nav-btn active" data-page="dashboard"><span class="ico">▦</span><span class="nav-label">Dashboard</span></button>
+      <button class="nav-btn" data-page="weather"><span class="ico">☁</span><span class="nav-label">Weather Forecast</span></button>
+      <button class="nav-btn" data-page="advisor"><span class="ico">◉</span><span class="nav-label">AI Crop Advisor</span></button>
+      <button class="nav-btn" data-page="disease"><span class="ico">✳</span><span class="nav-label">Disease Diagnostics</span></button>
+      <button class="nav-btn" data-page="fertilizer"><span class="ico">♧</span><span class="nav-label">Fertilizer Advisory</span></button>
+      <button class="nav-btn" data-page="seasonal"><span class="ico">♣</span><span class="nav-label">Seasonal Crops</span></button>
+      <button class="nav-btn" data-page="schemes"><span class="ico">▤</span><span class="nav-label">Govt Schemes</span></button>
+      <button class="nav-btn" data-page="profile"><span class="ico">♙</span><span class="nav-label">Farmer Profile</span></button>
+      <button class="nav-btn" data-page="settings"><span class="ico">⚙</span><span class="nav-label">Settings</span></button>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="connection"><span id="connectionDot" class="dot"></span><span id="connectionText">MQTT: Disconnected</span></div>
+      <div class="side-weather"><span>☀</span><span>Sensor telemetry<br><strong id="lastUpdate">Waiting for data</strong></span></div>
     </div>
+  </aside>
 
-    <div class="pill">
-      Last update: <span id="lastUpdate">--</span>
-    </div>
-  </div>
-
-  <div class="grid">
-    <div class="card">
-      <div class="label">Soil Moisture</div>
-      <div class="value"><span id="soil">--</span>%</div>
-      <div class="sub">Raw ADC: <span id="soilRaw">--</span></div>
-      <div class="sub">Status: <span id="soilStatus">--</span></div>
-      <div class="bar"><div class="fill" id="soilBar"></div></div>
-    </div>
-
-    <div class="card">
-      <div class="label">Temperature</div>
-      <div class="value"><span id="temperature">--</span><span> °C</span></div>
-      <div class="sub">DHT11 sensor</div>
-    </div>
-
-    <div class="card">
-      <div class="label">Humidity</div>
-      <div class="value"><span id="humidity">--</span>%</div>
-      <div class="sub">Relative humidity</div>
-    </div>
-
-    <div class="card">
-      <div class="label">MQ135 Sensor</div>
-      <div class="value" id="mq135">--</div>
-      <div class="sub">Raw ADC / 4095</div>
-    </div>
-  </div>
-
-  <div class="section">
-    <h2>Rover Status</h2>
-    <div class="grid">
-      <div class="card">
-        <div class="label">Motor Command</div>
-        <div class="value" id="motorCommand">--</div>
-        <div class="sub">F / B / L / R / S</div>
+  <main>
+    <section class="page active" id="page-dashboard">
+      <div class="topbar">
+        <div><h1>Dashboard Overview</h1><div class="subtitle">Real-time telemetry and robot diagnostics</div></div>
+        <div class="location"><span>☁</span><div><div class="temp" id="headerTemp">--°C</div><small>LOCAL SENSOR</small></div></div>
       </div>
 
-      <div class="card">
-        <div class="label">Sensor Connection</div>
-        <div class="value" id="sensorStatus">Waiting</div>
-        <div class="sub">Waiting for sensor messages</div>
+      <div class="metrics">
+        <article class="metric soil"><div class="metric-head"><span>Soil Moisture</span><span class="metric-icon">◆</span></div><div class="metric-value" id="soilValue">--%</div><div class="metric-foot"><span class="dot"></span><span id="soilFoot">Waiting for sensor</span></div></article>
+        <article class="metric humidity"><div class="metric-head"><span>Air Humidity</span><span class="metric-icon">≋</span></div><div class="metric-value" id="humidityValue">--%</div><div class="metric-foot"><span class="dot"></span><span id="humidityFoot">Waiting for sensor</span></div></article>
+        <article class="metric temperature"><div class="metric-head"><span>Temperature</span><span class="metric-icon">♨</span></div><div class="metric-value" id="temperatureValue">--°C</div><div class="metric-foot"><span class="dot"></span><span id="temperatureFoot">Waiting for sensor</span></div></article>
+        <article class="metric air"><div class="metric-head"><span>MQ135 Raw</span><span class="metric-icon">◉</span></div><div class="metric-value" id="airValue">--</div><div class="metric-foot"><span class="dot"></span><span id="airFoot">Raw ADC reading, not AQI</span></div></article>
       </div>
-    </div>
-  </div>
 
-  <div class="section">
-    <h2>Connection Information</h2>
-    <div class="card">
-      <p id="connectionInfo">Configure the HiveMQ credentials to connect.</p>
-      <p id="error"></p>
-    </div>
-  </div>
-</main>
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><span class="title-icon">▥</span>Sensor Historical Trends</div>
+          <div class="panel-tools">
+            <select class="control" id="historyCount" aria-label="Chart history size"><option value="10">Last 10 readings</option><option value="25" selected>Last 25 readings</option><option value="50">Last 50 readings</option></select>
+            <button class="control" id="clearHistory" title="Clear chart history">↻ Reset</button>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="sensorChart" aria-label="Sensor historical trends"></canvas></div>
+        <div class="small-note">Chart updates when new MQTT sensor messages arrive. Historical points are held in this browser session only.</div>
+      </section>
 
-<footer>
-  Smart Agriculture IoT Monitoring | Mechtrobotics
-</footer>
+      <div class="lower-grid">
+        <section class="panel">
+          <div class="panel-head"><div class="panel-title"><span class="title-icon">▤</span>Live Sensor Details</div><span class="pill" id="dataState">Waiting for data</span></div>
+          <div class="sensor-list">
+            <div class="sensor-row"><div><div class="sensor-label">Soil raw ADC</div><div class="sensor-number" id="soilRaw">--</div></div><span class="pill">GPIO 34</span></div>
+            <div class="sensor-row"><div><div class="sensor-label">Soil moisture status</div><div class="sensor-number" id="soilStatus">--</div></div><span class="pill" id="soilStatusPill">Unknown</span></div>
+            <div class="sensor-row"><div><div class="sensor-label">MQ135 raw ADC</div><div class="sensor-number" id="mqRaw">--</div></div><span class="pill">GPIO 35</span></div>
+            <div class="sensor-row"><div><div class="sensor-label">Wi-Fi signal strength</div><div class="sensor-number" id="wifiRSSI">--</div></div><span class="pill">ESP32</span></div>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><div class="panel-title"><span class="title-icon">✦</span>Smart Insights</div></div>
+          <div class="advice-card"><h3 id="soilInsightTitle">Soil moisture insight</h3><p id="soilInsight">Connect the ESP32 to see moisture guidance based on incoming sensor values.</p></div>
+          <div class="advice-card"><h3>Air sensor note</h3><p id="airInsight">MQ135 readings are raw ADC values. Calibrate the sensor before converting readings to an AQI or gas concentration.</p></div>
+          <p class="small-note">These are simple sensor-based hints, not a substitute for crop-specific agronomy advice.</p>
+        </section>
+      </div>
+      <footer>AgriRover · ESP32 + HiveMQ Cloud · <span id="footerState">Not connected</span></footer>
+    </section>
+
+    <section class="page" id="page-weather">
+      <div class="topbar"><div><h1>Weather Forecast</h1><div class="subtitle">Current local sensor conditions</div></div></div>
+      <div class="metrics">
+        <article class="metric temperature"><div class="metric-head">Temperature</div><div class="metric-value" id="weatherTemp">--°C</div><div class="metric-foot">From DHT11 sensor</div></article>
+        <article class="metric humidity"><div class="metric-head">Humidity</div><div class="metric-value" id="weatherHumidity">--%</div><div class="metric-foot">From DHT11 sensor</div></article>
+      </div>
+      <div class="panel"><div class="panel-title">About this view</div><p class="small-note">This page shows the temperature and humidity measured by your rover. It is not an external weather forecast; connect a weather API if you want forecast data.</p></div>
+    </section>
+
+    <section class="page" id="page-advisor">
+      <div class="topbar"><div><h1>AI Crop Advisor</h1><div class="subtitle">Basic guidance using current soil moisture</div></div></div>
+      <div class="panel"><div class="panel-title">Soil moisture guidance</div><div class="advice-card" style="margin-top:16px"><h3 id="advisorTitle">Waiting for sensor data</h3><p id="advisorText">Incoming soil moisture readings will appear here.</p></div><p class="small-note">For real crop recommendations, add crop type, soil type, growth stage, and local weather information.</p></div>
+    </section>
+
+    <section class="page" id="page-disease">
+      <div class="topbar"><div><h1>Disease Diagnostics</h1><div class="subtitle">Plant image diagnostics can be added here</div></div></div>
+      <div class="panel"><div class="panel-title">Image-based plant health</div><p class="small-note">Your current ESP32 payload contains environmental sensor readings only. Disease detection requires a plant image and a connected image-classification model. This page is a UI placeholder.</p><div class="empty-state">Plant disease model not configured</div></div>
+    </section>
+
+    <section class="page" id="page-fertilizer">
+      <div class="topbar"><div><h1>Fertilizer Advisory</h1><div class="subtitle">Soil and crop information</div></div></div>
+      <div class="panel"><div class="panel-title">Fertilizer recommendations</div><p class="small-note">NPK and soil pH are not included in the current hardware readings. Avoid making fertilizer recommendations from moisture and MQ135 data alone.</p><div class="empty-state">Add soil pH, NPK and crop details for meaningful recommendations</div></div>
+    </section>
+
+    <section class="page" id="page-seasonal">
+      <div class="topbar"><div><h1>Seasonal Crops</h1><div class="subtitle">Crop planning workspace</div></div></div>
+      <div class="panel"><div class="panel-title">Crop planning</div><p class="small-note">Add your location, soil type, irrigation source, and preferred crops to build a useful seasonal crop planner.</p><div class="empty-state">No crop plan configured</div></div>
+    </section>
+
+    <section class="page" id="page-schemes">
+      <div class="topbar"><div><h1>Government Schemes</h1><div class="subtitle">Farmer support resources</div></div></div>
+      <div class="panel"><div class="panel-title">Scheme information</div><p class="small-note">This is a placeholder page. Add verified official government links for schemes applicable to your state and eligibility.</p></div>
+    </section>
+
+    <section class="page" id="page-profile">
+      <div class="topbar"><div><h1>Farmer Profile</h1><div class="subtitle">Local profile form</div></div></div>
+      <div class="panel">
+        <form id="profileForm" class="settings-grid">
+          <label class="field">Farmer name<input id="farmerName" placeholder="Enter name" /></label>
+          <label class="field">Farm location<input id="farmLocation" placeholder="Village / district" /></label>
+          <label class="field">Main crop<input id="mainCrop" placeholder="e.g. Paddy, tomato" /></label>
+          <label class="field">Farm size<input id="farmSize" placeholder="e.g. 2 acres" /></label>
+          <div class="field full"><button class="primary" type="submit">Save profile in this browser</button><span class="small-note" id="profileSaved">Profile is stored locally in this browser only.</span></div>
+        </form>
+      </div>
+    </section>
+
+    <section class="page" id="page-settings">
+      <div class="topbar"><div><h1>Settings</h1><div class="subtitle">Connect this dashboard to HiveMQ Cloud</div></div></div>
+      <section class="panel">
+        <div class="panel-head"><div class="panel-title">MQTT connection</div><span class="pill" id="settingsState">Disconnected</span></div>
+        <form id="mqttForm" class="settings-grid">
+          <label class="field full">HiveMQ cluster hostname<input id="mqttHost" required placeholder="your-cluster.s1.eu.hivemq.cloud" /></label>
+          <label class="field">WebSocket port<input id="mqttPort" type="number" min="1" max="65535" value="8884" required /></label>
+          <label class="field">Sensor topic<input id="sensorTopic" value="agrirover/sensors" required /></label>
+          <label class="field">Status topic<input id="statusTopic" value="agrirover/status" required /></label>
+          <label class="field">MQTT username<input id="mqttUser" autocomplete="username" required /></label>
+          <label class="field">MQTT password<input id="mqttPass" type="password" autocomplete="current-password" required /></label>
+          <div class="field full"><label><input type="checkbox" id="rememberSettings" /> Remember these settings in this browser (not recommended on shared devices)</label></div>
+          <div class="field full" style="display:flex;flex-direction:row;gap:10px;flex-wrap:wrap"><button class="primary" type="submit">Connect to HiveMQ</button><button class="secondary" type="button" id="disconnectBtn">Disconnect</button><button class="secondary" type="button" id="demoBtn">Show demo data</button></div>
+        </form>
+        <p class="small-note">Browser MQTT uses secure WebSockets (wss), typically port 8884 for HiveMQ Cloud. Do not use the ESP32 TLS port 8883 in this browser form. Browser credentials are visible to anyone who can inspect the page; for production use a restricted MQTT user or a backend proxy.</p>
+        <p class="small-note" id="mqttMessage">Enter your HiveMQ Cloud WebSocket connection details, then connect.</p>
+      </section>
+    </section>
+  </main>
+</div>
 
 <script>
-  // Replace these with your HiveMQ Cloud details.
-  const HOST = "714c2eac1b6142fbb2753fc0870e98dd.s1.eu.hivemq.cloud";
-  const USERNAME = "agri_robot";
-  const PASSWORD = "12345678";
+(() => {
+  const $ = id => document.getElementById(id);
+  const state = {
+    client: null,
+    demoTimer: null,
+    chart: null,
+    history: [],
+    maxHistory: 25,
+    lastMessageAt: null,
+    sensorTopic: 'agrirover/sensors',
+    statusTopic: 'agrirover/status'
+  };
 
-  const SENSOR_TOPIC = "agrirover/sensors";
-  const STATUS_TOPIC = "agrirover/status";
-
-  const mqttStatus = document.getElementById("mqttStatus");
-  const mqttDot = document.getElementById("mqttDot");
-  const errorBox = document.getElementById("error");
-
-  // Secure WebSocket port for HiveMQ Cloud.
-  const client = mqtt.connect(`wss://${HOST}:8884/mqtt`, {
-    username: USERNAME,
-    password: PASSWORD,
-    clientId: "AgriRoverDashboard_" +
-      Math.random().toString(16).slice(2, 10),
-    clean: true,
-    connectTimeout: 10000,
-    reconnectPeriod: 3000
-  });
-
-  function setText(id, value) {
-    document.getElementById(id).textContent = value;
-  }
-
-  function showValue(value, digits = null) {
-    if (value === null || value === undefined ||
-        value === "" || !Number.isFinite(Number(value))) {
-      return "--";
-    }
-
-    return digits === null
-      ? String(value)
-      : Number(value).toFixed(digits);
-  }
-
-  client.on("connect", () => {
-    mqttStatus.textContent = "MQTT: Connected";
-    mqttDot.style.background = "#4ade80";
-    errorBox.textContent = "";
-
-    setText("connectionInfo", "Connected to HiveMQ Cloud.");
-
-    client.subscribe([SENSOR_TOPIC, STATUS_TOPIC], (err) => {
-      if (err) errorBox.textContent = "Subscription failed: " + err.message;
+  const pages = [...document.querySelectorAll('.page')];
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b === btn));
+      pages.forEach(p => p.classList.toggle('active', p.id === 'page-' + btn.dataset.page));
     });
   });
 
-  client.on("reconnect", () => {
-    mqttStatus.textContent = "MQTT: Reconnecting";
-    mqttDot.style.background = "#fbbf24";
+  const ctx = $('sensorChart').getContext('2d');
+  state.chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label: 'Soil Moisture (%)', data: [], borderColor: '#18b58b', backgroundColor: 'rgba(24,181,139,.10)', fill: true, tension: .35, pointRadius: 2.5, borderWidth: 2 },
+        { label: 'Air Humidity (%)', data: [], borderColor: '#4d87d9', backgroundColor: 'rgba(77,135,217,.08)', fill: true, tension: .35, pointRadius: 2.5, borderWidth: 2 },
+        { label: 'Temperature (°C)', data: [], borderColor: '#d9a044', backgroundColor: 'rgba(217,160,68,.05)', fill: false, tension: .35, pointRadius: 2.5, borderWidth: 2 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 24, color: '#66756c', font: { size: 11 } } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#89968e', maxTicksLimit: 8, font: { size: 10 } } },
+        y: { beginAtZero: true, max: 100, grid: { color: '#eef2ef' }, ticks: { color: '#89968e', font: { size: 10 } } }
+      }
+    }
   });
 
-  client.on("offline", () => {
-    mqttStatus.textContent = "MQTT: Offline";
-    mqttDot.style.background = "#f87171";
-  });
+  function setConnection(connected, text) {
+    $('connectionDot').className = 'dot ' + (connected ? 'online' : 'offline');
+    $('connectionText').textContent = text || (connected ? 'MQTT: Connected' : 'MQTT: Disconnected');
+    $('settingsState').textContent = connected ? 'Connected' : 'Disconnected';
+    $('settingsState').className = connected ? 'pill' : 'pill bad';
+    $('footerState').textContent = connected ? 'Connected' : 'Not connected';
+  }
 
-  client.on("error", (err) => {
-    errorBox.textContent = "MQTT error: " + err.message;
-  });
+  function soilGuidance(percent) {
+    if (!Number.isFinite(percent)) return ['Waiting for sensor data', 'Connect the ESP32 to receive soil moisture readings.'];
+    if (percent < 30) return ['Soil may be dry', 'Moisture is below the configured 30% threshold. Check the soil and crop irrigation requirements before watering.'];
+    if (percent < 45) return ['Moisture is on the lower side', 'Check the crop-specific moisture range and consider rechecking the soil before irrigation.'];
+    if (percent <= 75) return ['Moisture is in a moderate range', 'Current moisture is within a general middle range. Ideal values vary by crop and soil type.'];
+    return ['High soil moisture', 'Check drainage and crop needs; persistently wet soil can harm some plant roots.'];
+  }
 
-  client.on("message", (topic, message) => {
-    const payload = message.toString();
+  function updateUI(d) {
+    const soil = Number(d.soil_percent);
+    const temp = d.temperature === null || d.temperature === undefined ? NaN : Number(d.temperature);
+    const hum = d.humidity === null || d.humidity === undefined ? NaN : Number(d.humidity);
+    const soilRaw = Number(d.soil_raw);
+    const mq = Number(d.mq135_raw);
+    const rssi = Number(d.wifi_rssi);
 
-    if (topic === STATUS_TOPIC) {
-      setText("deviceStatus", "Rover: " + payload);
+    if (Number.isFinite(soil)) {
+      $('soilValue').textContent = Math.round(soil) + '%';
+      $('soilFoot').textContent = d.soil_status || (soil < 30 ? 'Below 30% threshold' : 'Reading received');
+      $('soilRaw').textContent = Number.isFinite(soilRaw) ? soilRaw : '--';
+      $('soilStatus').textContent = d.soil_status || (soil < 30 ? 'DRY' : 'MOIST');
+      $('soilStatusPill').textContent = d.soil_status || (soil < 30 ? 'Dry' : 'Moist');
+      $('soilStatusPill').className = 'pill ' + (soil < 30 ? 'warn' : '');
+      const [title, insight] = soilGuidance(soil);
+      $('soilInsightTitle').textContent = title;
+      $('soilInsight').textContent = insight;
+      $('advisorTitle').textContent = title;
+      $('advisorText').textContent = insight;
+    }
+    if (Number.isFinite(hum)) {
+      $('humidityValue').textContent = hum.toFixed(0) + '%';
+      $('weatherHumidity').textContent = hum.toFixed(0) + '%';
+      $('humidityFoot').textContent = hum >= 30 && hum <= 70 ? 'Moderate humidity' : 'Outside general range';
+    }
+    if (Number.isFinite(temp)) {
+      $('temperatureValue').textContent = temp.toFixed(1) + '°C';
+      $('headerTemp').textContent = temp.toFixed(1) + '°C';
+      $('weatherTemp').textContent = temp.toFixed(1) + '°C';
+      $('temperatureFoot').textContent = temp >= 18 && temp <= 32 ? 'Moderate temperature' : 'Check crop conditions';
+    }
+    if (Number.isFinite(mq)) {
+      $('airValue').textContent = Math.round(mq);
+      $('mqRaw').textContent = Math.round(mq);
+      $('airFoot').textContent = 'Raw ADC · not calibrated AQI';
+      $('airInsight').textContent = 'Latest MQ135 raw ADC reading: ' + Math.round(mq) + '. This is not an AQI value; calibrate the sensor before assigning an air-quality category.';
+    }
+    $('wifiRSSI').textContent = Number.isFinite(rssi) ? rssi + ' dBm' : '--';
+    $('dataState').textContent = 'Live data received';
+    $('dataState').className = 'pill';
+    state.lastMessageAt = new Date();
+    $('lastUpdate').textContent = state.lastMessageAt.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+
+    const label = state.lastMessageAt.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    state.history.push({
+      label,
+      soil: Number.isFinite(soil) ? soil : null,
+      humidity: Number.isFinite(hum) ? hum : null,
+      temperature: Number.isFinite(temp) ? temp : null
+    });
+    state.history = state.history.slice(-state.maxHistory);
+    renderChart();
+  }
+
+  function renderChart() {
+    state.chart.data.labels = state.history.map(x => x.label);
+    state.chart.data.datasets[0].data = state.history.map(x => x.soil);
+    state.chart.data.datasets[1].data = state.history.map(x => x.humidity);
+    state.chart.data.datasets[2].data = state.history.map(x => x.temperature);
+    state.chart.update('none');
+  }
+
+  function disconnect(showMessage = true) {
+    if (state.client) {
+      try { state.client.end(true); } catch (_) {}
+      state.client = null;
+    }
+    if (state.demoTimer) {
+      clearInterval(state.demoTimer);
+      state.demoTimer = null;
+    }
+    setConnection(false);
+    if (showMessage) $('mqttMessage').textContent = 'Disconnected from MQTT.';
+  }
+
+  function connectMQTT(config) {
+    disconnect(false);
+    state.sensorTopic = config.sensorTopic;
+    state.statusTopic = config.statusTopic;
+    $('mqttMessage').textContent = 'Connecting to HiveMQ over secure WebSockets...';
+
+    if (!window.mqtt) {
+      $('mqttMessage').textContent = 'MQTT library did not load. Check internet access and reload this page.';
       return;
     }
 
-    if (topic !== SENSOR_TOPIC) return;
+    const url = 'wss://' + config.host.trim() + ':' + Number(config.port) + '/mqtt';
+    const client = mqtt.connect(url, {
+      username: config.username,
+      password: config.password,
+      clientId: 'AgriRoverWeb_' + Math.random().toString(16).slice(2, 10),
+      clean: true,
+      connectTimeout: 10000,
+      reconnectPeriod: 3000,
+      keepalive: 30
+    });
+    state.client = client;
 
-    try {
-      const data = JSON.parse(payload);
+    client.on('connect', () => {
+      if (state.client !== client) return;
+      setConnection(true, 'MQTT: Connected');
+      $('mqttMessage').textContent = 'Connected to HiveMQ. Subscribing to ' + state.sensorTopic;
+      client.subscribe([state.sensorTopic, state.statusTopic], { qos: 0 }, err => {
+        if (err) $('mqttMessage').textContent = 'Connected, but subscription failed: ' + err.message;
+        else $('mqttMessage').textContent = 'Connected and subscribed. Waiting for sensor messages...';
+      });
+    });
 
-      setText("soil", showValue(data.soil_percent));
-      setText("soilRaw", showValue(data.soil_raw));
-      setText("soilStatus", showValue(data.soil_status));
+    client.on('reconnect', () => {
+      if (state.client === client) $('mqttMessage').textContent = 'Connection lost; retrying...';
+    });
 
-      setText("temperature", showValue(data.temperature, 1));
-      setText("humidity", showValue(data.humidity, 1));
-      setText("mq135", showValue(data.mq135_raw));
+    client.on('close', () => {
+      if (state.client === client) setConnection(false);
+    });
 
-      setText("motorCommand", showValue(data.motor_command));
-      setText("sensorStatus", "Receiving");
+    client.on('offline', () => {
+      if (state.client === client) setConnection(false);
+    });
 
-      const soil = Number(data.soil_percent);
-      if (Number.isFinite(soil)) {
-        document.getElementById("soilBar").style.width =
-          Math.max(0, Math.min(100, soil)) + "%";
+    client.on('error', err => {
+      if (state.client === client) $('mqttMessage').textContent = 'MQTT error: ' + err.message + '. Check host, WebSocket port, credentials, and broker permissions.';
+    });
+
+    client.on('message', (topic, payload) => {
+      if (topic === state.statusTopic) {
+        const status = payload.toString();
+        if (status === 'online') setConnection(true, 'AgriRover: Online');
+        else if (status === 'offline') setConnection(false, 'AgriRover: Offline');
+        return;
       }
+      if (topic !== state.sensorTopic) return;
 
-      setText("lastUpdate", new Date().toLocaleTimeString());
-    } catch (err) {
-      errorBox.textContent = "Invalid sensor JSON: " + err.message;
+      try {
+        const data = JSON.parse(payload.toString());
+        updateUI(data);
+        $('mqttMessage').textContent = 'Last sensor message received at ' + new Date().toLocaleTimeString();
+      } catch (err) {
+        $('mqttMessage').textContent = 'Received invalid JSON on ' + topic + '. Check the ESP32 payload format.';
+      }
+    });
+  }
+
+  $('mqttForm').addEventListener('submit', event => {
+    event.preventDefault();
+    const config = {
+      host: $('mqttHost').value.trim(),
+      port: Number($('mqttPort').value),
+      sensorTopic: $('sensorTopic').value.trim(),
+      statusTopic: $('statusTopic').value.trim(),
+      username: $('mqttUser').value.trim(),
+      password: $('mqttPass').value
+    };
+    if (!config.host || !config.sensorTopic || !config.statusTopic || !config.username || !config.password) {
+      $('mqttMessage').textContent = 'Please complete all MQTT fields.';
+      return;
+    }
+    if ($('rememberSettings').checked) {
+      try {
+        localStorage.setItem('agr rover mqtt settings', JSON.stringify(config));
+      } catch (_) {}
+    }
+    connectMQTT(config);
+  });
+
+  $('disconnectBtn').addEventListener('click', () => disconnect());
+
+  $('demoBtn').addEventListener('click', () => {
+    disconnect(false);
+    setConnection(true, 'Demo mode');
+    $('mqttMessage').textContent = 'Demo mode is showing simulated data only. It is not connected to the ESP32.';
+    const demo = () => {
+      const soil = Math.round(43 + Math.random() * 8);
+      updateUI({
+        soil_raw: Math.round(3000 - soil * 16),
+        soil_percent: soil,
+        soil_status: soil < 30 ? 'DRY' : 'MOIST',
+        mq135_raw: Math.round(900 + Math.random() * 300),
+        temperature: +(28 + Math.random() * 3).toFixed(1),
+        humidity: Math.round(60 + Math.random() * 15),
+        wifi_rssi: -48
+      });
+    };
+    demo();
+    state.demoTimer = setInterval(demo, 2500);
+  });
+
+  $('historyCount').addEventListener('change', () => {
+    state.maxHistory = Number($('historyCount').value);
+    state.history = state.history.slice(-state.maxHistory);
+    renderChart();
+  });
+
+  $('clearHistory').addEventListener('click', () => {
+    state.history = [];
+    renderChart();
+  });
+
+  $('profileForm').addEventListener('submit', event => {
+    event.preventDefault();
+    const profile = {
+      name: $('farmerName').value,
+      location: $('farmLocation').value,
+      crop: $('mainCrop').value,
+      size: $('farmSize').value
+    };
+    try {
+      localStorage.setItem('agr rover farmer profile', JSON.stringify(profile));
+      $('profileSaved').textContent = 'Profile saved in this browser.';
+    } catch (_) {
+      $('profileSaved').textContent = 'Could not save profile in this browser.';
     }
   });
+
+  // Restore optional local-only settings if the user explicitly enabled saving.
+  try {
+    const saved = localStorage.getItem('agr rover mqtt settings');
+    if (saved) {
+      const c = JSON.parse(saved);
+      $('mqttHost').value = c.host || '';
+      $('mqttPort').value = c.port || 8884;
+      $('sensorTopic').value = c.sensorTopic || 'agrirover/sensors';
+      $('statusTopic').value = c.statusTopic || 'agrirover/status';
+      $('mqttUser').value = c.username || '';
+      $('mqttPass').value = c.password || '';
+      $('rememberSettings').checked = true;
+    }
+    const profile = JSON.parse(localStorage.getItem('agr rover farmer profile') || 'null');
+    if (profile) {
+      $('farmerName').value = profile.name || '';
+      $('farmLocation').value = profile.location || '';
+      $('mainCrop').value = profile.crop || '';
+      $('farmSize').value = profile.size || '';
+    }
+  } catch (_) {}
+})();
 </script>
 </body>
 </html>
