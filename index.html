@@ -1,0 +1,293 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mechtrobotics | Smart Agriculture Rover</title>
+
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #101827;
+      color: #eef2ff;
+    }
+
+    header {
+      padding: 24px;
+      background: #172337;
+      border-bottom: 1px solid #344258;
+    }
+
+    header h1 { margin: 0 0 8px; font-size: 25px; }
+    header p { margin: 0; color: #aebdd2; }
+
+    main { max-width: 1100px; margin: auto; padding: 24px; }
+
+    .status {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .pill {
+      padding: 10px 14px;
+      background: #202d42;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .dot {
+      display: inline-block;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #8792a6;
+      margin-right: 7px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: #1b2940;
+      border: 1px solid #35445c;
+      border-radius: 14px;
+      padding: 22px;
+    }
+
+    .label { color: #b6c4d9; font-size: 14px; }
+
+    .value {
+      font-size: 32px;
+      font-weight: bold;
+      margin: 14px 0;
+      overflow-wrap: anywhere;
+    }
+
+    .sub { color: #9eafc7; font-size: 13px; }
+
+    .bar {
+      height: 8px;
+      background: #35445c;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-top: 16px;
+    }
+
+    .fill {
+      height: 100%;
+      width: 0%;
+      background: #4ade80;
+      transition: width .3s;
+    }
+
+    .section { margin-top: 26px; }
+    .section h2 { font-size: 19px; }
+
+    #error {
+      color: #fca5a5;
+      overflow-wrap: anywhere;
+    }
+
+    footer {
+      padding: 24px;
+      color: #9eafc7;
+      text-align: center;
+      font-size: 13px;
+    }
+  </style>
+</head>
+
+<body>
+<header>
+  <h1>Smart Agriculture Rover</h1>
+  <p>Mechtrobotics | Real-time IoT Monitoring</p>
+</header>
+
+<main>
+  <div class="status">
+    <div class="pill">
+      <span class="dot" id="mqttDot"></span>
+      <span id="mqttStatus">MQTT: Disconnected</span>
+    </div>
+
+    <div class="pill">
+      <span id="deviceStatus">Rover: Unknown</span>
+    </div>
+
+    <div class="pill">
+      Last update: <span id="lastUpdate">--</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="label">Soil Moisture</div>
+      <div class="value"><span id="soil">--</span>%</div>
+      <div class="sub">Raw ADC: <span id="soilRaw">--</span></div>
+      <div class="sub">Status: <span id="soilStatus">--</span></div>
+      <div class="bar"><div class="fill" id="soilBar"></div></div>
+    </div>
+
+    <div class="card">
+      <div class="label">Temperature</div>
+      <div class="value"><span id="temperature">--</span><span> °C</span></div>
+      <div class="sub">DHT11 sensor</div>
+    </div>
+
+    <div class="card">
+      <div class="label">Humidity</div>
+      <div class="value"><span id="humidity">--</span>%</div>
+      <div class="sub">Relative humidity</div>
+    </div>
+
+    <div class="card">
+      <div class="label">MQ135 Sensor</div>
+      <div class="value" id="mq135">--</div>
+      <div class="sub">Raw ADC / 4095</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Rover Status</h2>
+    <div class="grid">
+      <div class="card">
+        <div class="label">Motor Command</div>
+        <div class="value" id="motorCommand">--</div>
+        <div class="sub">F / B / L / R / S</div>
+      </div>
+
+      <div class="card">
+        <div class="label">Sensor Connection</div>
+        <div class="value" id="sensorStatus">Waiting</div>
+        <div class="sub">Waiting for sensor messages</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Connection Information</h2>
+    <div class="card">
+      <p id="connectionInfo">Configure the HiveMQ credentials to connect.</p>
+      <p id="error"></p>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Smart Agriculture IoT Monitoring | Mechtrobotics
+</footer>
+
+<script>
+  // Replace these with your HiveMQ Cloud details.
+  const HOST = "714c2eac1b6142fbb2753fc0870e98dd.s1.eu.hivemq.cloud";
+  const USERNAME = "agri_robot";
+  const PASSWORD = "12345678";
+
+  const SENSOR_TOPIC = "agrirover/sensors";
+  const STATUS_TOPIC = "agrirover/status";
+
+  const mqttStatus = document.getElementById("mqttStatus");
+  const mqttDot = document.getElementById("mqttDot");
+  const errorBox = document.getElementById("error");
+
+  // Secure WebSocket port for HiveMQ Cloud.
+  const client = mqtt.connect(`wss://${HOST}:8884/mqtt`, {
+    username: USERNAME,
+    password: PASSWORD,
+    clientId: "AgriRoverDashboard_" +
+      Math.random().toString(16).slice(2, 10),
+    clean: true,
+    connectTimeout: 10000,
+    reconnectPeriod: 3000
+  });
+
+  function setText(id, value) {
+    document.getElementById(id).textContent = value;
+  }
+
+  function showValue(value, digits = null) {
+    if (value === null || value === undefined ||
+        value === "" || !Number.isFinite(Number(value))) {
+      return "--";
+    }
+
+    return digits === null
+      ? String(value)
+      : Number(value).toFixed(digits);
+  }
+
+  client.on("connect", () => {
+    mqttStatus.textContent = "MQTT: Connected";
+    mqttDot.style.background = "#4ade80";
+    errorBox.textContent = "";
+
+    setText("connectionInfo", "Connected to HiveMQ Cloud.");
+
+    client.subscribe([SENSOR_TOPIC, STATUS_TOPIC], (err) => {
+      if (err) errorBox.textContent = "Subscription failed: " + err.message;
+    });
+  });
+
+  client.on("reconnect", () => {
+    mqttStatus.textContent = "MQTT: Reconnecting";
+    mqttDot.style.background = "#fbbf24";
+  });
+
+  client.on("offline", () => {
+    mqttStatus.textContent = "MQTT: Offline";
+    mqttDot.style.background = "#f87171";
+  });
+
+  client.on("error", (err) => {
+    errorBox.textContent = "MQTT error: " + err.message;
+  });
+
+  client.on("message", (topic, message) => {
+    const payload = message.toString();
+
+    if (topic === STATUS_TOPIC) {
+      setText("deviceStatus", "Rover: " + payload);
+      return;
+    }
+
+    if (topic !== SENSOR_TOPIC) return;
+
+    try {
+      const data = JSON.parse(payload);
+
+      setText("soil", showValue(data.soil_percent));
+      setText("soilRaw", showValue(data.soil_raw));
+      setText("soilStatus", showValue(data.soil_status));
+
+      setText("temperature", showValue(data.temperature, 1));
+      setText("humidity", showValue(data.humidity, 1));
+      setText("mq135", showValue(data.mq135_raw));
+
+      setText("motorCommand", showValue(data.motor_command));
+      setText("sensorStatus", "Receiving");
+
+      const soil = Number(data.soil_percent);
+      if (Number.isFinite(soil)) {
+        document.getElementById("soilBar").style.width =
+          Math.max(0, Math.min(100, soil)) + "%";
+      }
+
+      setText("lastUpdate", new Date().toLocaleTimeString());
+    } catch (err) {
+      errorBox.textContent = "Invalid sensor JSON: " + err.message;
+    }
+  });
+</script>
+</body>
+</html>
